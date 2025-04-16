@@ -32,7 +32,7 @@ uv pip install jupyter_server_ydoc pycrdt
 ### 2. Create Your Notebook
 
 ```bash
-# Clone the repository (if needed)
+# Clone the repository -> Required
 git clone https://github.com/kshitijdesai99/jupyter_mcp_server_kshitij.git
 cd jupyter_mcp_server_kshitij
 
