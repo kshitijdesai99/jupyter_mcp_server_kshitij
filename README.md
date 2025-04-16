@@ -15,7 +15,7 @@ This repository contains a Docker-based client for connecting to a Jupyter serve
 ```bash
 # Create and activate virtual environment
 python3.12 -m venv env
-source env/Scripts/activate  # Windows: env\Scripts\activate
+source env/bin/activate  # Windows: env\Scripts\activate
 
 # Install package manager
 pip install uv
