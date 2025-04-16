@@ -56,7 +56,7 @@ jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN --ip 0.0.0.0
 docker build -t notebook-client .
 ```
 
-### Run the Client Container
+### Run the Client Container --> just for testing not required for mcp
 
 ```bash
 docker run \
