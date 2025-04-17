@@ -11,7 +11,7 @@ COPY mcp.py /app/notebook_client.py
 
 # Set environment variables with the default values
 ENV NOTEBOOK_PATH="notebook.ipynb" \
-    SERVER_URL="http://localhost:8888" \
+    SERVER_URL="http://host.docker.internal:8888" \
     TOKEN="MY_TOKEN"
 
 # Run the script
