@@ -35,6 +35,7 @@ uv pip install jupyter_server_ydoc pycrdt
 # Clone the repository -> Required
 git clone https://github.com/kshitijdesai99/jupyter_mcp_server_kshitij.git
 cd jupyter_mcp_server_kshitij
+touch notebook.ipynb
 ```
 
 ### 3. Start Jupyter Server
@@ -45,8 +46,9 @@ jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN --ip 0.0.0.0
 
 > **Note:** Replace `MY_TOKEN` with your preferred authentication token or just keep it as it is.
 
-# Create a new notebook
-click on create a new notebook and rename it notebook.ipynb
+# Create a new notebook in case you get tornado.websocket.WebSocketClosedError (for Mac)
+just delete the notebook.ipynb and then inside the jupyter server 
+click on create a new notebook and rename it to notebook.ipynb
 
 ## Docker Instructions
 
