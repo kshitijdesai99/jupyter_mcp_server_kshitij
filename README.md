@@ -81,7 +81,7 @@ Add this configuration to your Claude desktop `config.json` file:
       "run",
       "--rm",
       "-i",
-      "-e", "NOTEBOOK_PATH=C:\\Users\\user\\Documents\\Jupyter_MCP\\notebook.ipynb",
+      "-e", "NOTEBOOK_PATH=notebook.ipynb",
       "-e", "SERVER_URL=http://host.docker.internal:8888",
       "-e", "TOKEN=MY_TOKEN",
       "notebook-client"
@@ -89,7 +89,7 @@ Add this configuration to your Claude desktop `config.json` file:
 }
 ```
 
-> **Important:** Adjust the `NOTEBOOK_PATH` to match your actual file location.
+> **Important:** no need to update notebook path
 
 ## Troubleshooting
 
