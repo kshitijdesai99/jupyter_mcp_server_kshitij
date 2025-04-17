@@ -1,6 +1,7 @@
 # Jupyter MCP Server Client
 
 This repository contains a Docker-based client for connecting to a Jupyter server with multi-collaborative protocol support.
+Works with both windows and mac on claude desktop
 
 ## Prerequisites
 
