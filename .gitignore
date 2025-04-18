@@ -1,1 +1,6 @@
 env
+notebook.ipynb
+__pycache__/
+*.pyc
+*.db
+.ipynb_checkpoints
