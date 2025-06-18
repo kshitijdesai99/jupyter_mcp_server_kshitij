@@ -2,7 +2,7 @@ import os
 import sys
 import asyncio
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -35,6 +35,41 @@ logger.info(f"Initializing kernel client with SERVER_URL={SERVER_URL}")
 kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
 kernel.start()
 logger.info("Kernel client started successfully")
+
+# Global notebook client - reuse connection
+notebook_client: Optional[NbModelClient] = None
+
+async def get_notebook_client():
+    """Get or create a notebook client with connection reuse."""
+    global notebook_client
+    try:
+        if notebook_client is None:
+            logger.info("Creating new notebook client")
+            notebook_client = NbModelClient(
+                get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
+            )
+            await notebook_client.start()
+            logger.info("Notebook client connected successfully")
+        return notebook_client
+    except Exception as e:
+        logger.error(f"Error creating notebook client: {str(e)}")
+        notebook_client = None
+        raise
+
+async def ensure_notebook_connection():
+    """Ensure notebook client is connected, reconnect if needed."""
+    global notebook_client
+    try:
+        if notebook_client is None:
+            return await get_notebook_client()
+        
+        # Test connection by trying to access the document
+        _ = notebook_client._doc
+        return notebook_client
+    except Exception as e:
+        logger.warning(f"Notebook connection lost, reconnecting: {str(e)}")
+        notebook_client = None
+        return await get_notebook_client()
 
 def extract_output(output: dict) -> str:
     """
@@ -73,18 +108,43 @@ async def add_markdown_cell(cell_content: str) -> str:
         str: Success message
     """
     logger.info("Adding markdown cell")
-    try:
-        notebook = NbModelClient(
-            get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
-        )
-        await notebook.start()
-        notebook.add_markdown_cell(cell_content)
-        await notebook.stop()
-        logger.info("Markdown cell added successfully")
-        return "Jupyter Markdown cell added."
-    except Exception as e:
-        logger.error(f"Error adding markdown cell: {str(e)}")
-        return f"Error adding markdown cell: {str(e)}"
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Markdown cell addition attempt {attempt + 1}/{max_retries}")
+            notebook = await ensure_notebook_connection()
+            
+            # Add the markdown cell
+            cell_index = notebook.add_markdown_cell(cell_content)
+            logger.info(f"Markdown cell added at index {cell_index}")
+            
+            # Wait for the operation to complete
+            await asyncio.sleep(0.5)
+            
+            # Verify the cell was added
+            ydoc = notebook._doc
+            if cell_index < len(ydoc._ycells):
+                cell_type = ydoc._ycells[cell_index]["cell_type"]
+                if cell_type == "markdown":
+                    logger.info("Markdown cell verified successfully")
+                    return "Jupyter Markdown cell added."
+                else:
+                    logger.warning(f"Cell at index {cell_index} has type {cell_type}, not markdown")
+            
+            logger.info("Markdown cell added successfully")
+            return "Jupyter Markdown cell added."
+            
+        except Exception as e:
+            logger.error(f"Attempt {attempt + 1} failed for markdown cell: {str(e)}")
+            if attempt < max_retries - 1:
+                logger.info("Retrying markdown cell addition...")
+                # Reset connection on error
+                global notebook_client
+                notebook_client = None
+                await asyncio.sleep(1)
+            else:
+                return f"Error adding markdown cell after {max_retries} attempts: {str(e)}"
 
 @mcp.tool()
 async def add_execute_code_cell(cell_content: str) -> List[str]:
@@ -97,27 +157,59 @@ async def add_execute_code_cell(cell_content: str) -> List[str]:
         list[str]: List of outputs from the executed cell
     """
     logger.info("Adding and executing code cell")
-    try:
-        notebook = NbModelClient(
-            get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
-        )
-        await notebook.start()
-        cell_index = notebook.add_code_cell(cell_content)
-        logger.info(f"Cell added at index {cell_index}, executing...")
-        notebook.execute_cell(cell_index, kernel)
-        
-        # Wait a moment for execution to complete
-        await asyncio.sleep(1)
-        
-        ydoc = notebook._doc
-        outputs = ydoc._ycells[cell_index]["outputs"]
-        str_outputs = [extract_output(output) for output in outputs]
-        await notebook.stop()
-        logger.info(f"Code cell execution complete, got {len(str_outputs)} outputs")
-        return str_outputs
-    except Exception as e:
-        logger.error(f"Error executing code cell: {str(e)}")
-        return [f"Error executing code cell: {str(e)}"]
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Code cell execution attempt {attempt + 1}/{max_retries}")
+            notebook = await ensure_notebook_connection()
+            
+            # Add the code cell
+            cell_index = notebook.add_code_cell(cell_content)
+            logger.info(f"Code cell added at index {cell_index}, executing...")
+            
+            # Execute the cell
+            notebook.execute_cell(cell_index, kernel)
+            
+            # Wait for execution with progressive checking
+            max_wait_time = 30  # seconds
+            check_interval = 0.5  # seconds
+            waited = 0
+            
+            while waited < max_wait_time:
+                await asyncio.sleep(check_interval)
+                waited += check_interval
+                
+                try:
+                    ydoc = notebook._doc
+                    if cell_index < len(ydoc._ycells):
+                        outputs = ydoc._ycells[cell_index]["outputs"]
+                        if outputs:  # Has outputs, execution likely complete
+                            break
+                except Exception as e:
+                    logger.warning(f"Error checking outputs during wait: {str(e)}")
+                
+                if waited % 5 == 0:  # Log every 5 seconds
+                    logger.info(f"Still waiting for execution... ({waited}s)")
+            
+            # Get final outputs
+            ydoc = notebook._doc
+            outputs = ydoc._ycells[cell_index]["outputs"]
+            str_outputs = [extract_output(output) for output in outputs]
+            
+            logger.info(f"Code cell execution complete, got {len(str_outputs)} outputs")
+            return str_outputs
+            
+        except Exception as e:
+            logger.error(f"Attempt {attempt + 1} failed for code cell: {str(e)}")
+            if attempt < max_retries - 1:
+                logger.info("Retrying code cell execution...")
+                # Reset connection on error
+                global notebook_client
+                notebook_client = None
+                await asyncio.sleep(1)
+            else:
+                return [f"Error executing code cell after {max_retries} attempts: {str(e)}"]
 
 @mcp.tool()
 async def read_notebook_content() -> Dict[str, Any]:
@@ -128,10 +220,7 @@ async def read_notebook_content() -> Dict[str, Any]:
     """
     logger.info("Reading notebook content")
     try:
-        notebook = NbModelClient(
-            get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
-        )
-        await notebook.start()
+        notebook = await ensure_notebook_connection()
         
         # Get the y-document which contains the notebook content
         ydoc = notebook._doc
@@ -159,7 +248,6 @@ async def read_notebook_content() -> Dict[str, Any]:
                     "content": cell_content
                 })
         
-        await notebook.stop()
         logger.info(f"Read {len(cells)} cells from notebook")
         return {
             "cells": cells,
@@ -182,10 +270,23 @@ async def kernel_restart() -> str:
     """
     logger.info("Restarting kernel")
     try:
-        global kernel
+        global kernel, notebook_client
+        
+        # Stop current kernel
         kernel.stop()
+        
+        # Reset notebook client to force reconnection
+        if notebook_client:
+            try:
+                await notebook_client.stop()
+            except:
+                pass
+            notebook_client = None
+        
+        # Start new kernel
         kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
         kernel.start()
+        
         logger.info("Kernel restarted successfully")
         return "Jupyter kernel restarted successfully"
     except Exception as e:
@@ -195,8 +296,16 @@ async def kernel_restart() -> str:
 async def cleanup_resources():
     """Clean up resources when shutting down."""
     logger.info("Cleaning up resources")
+    
+    global notebook_client
+    if notebook_client:
+        try:
+            await notebook_client.stop()
+        except Exception as e:
+            logger.warning(f"Error stopping notebook client: {str(e)}")
+    
     kernel.stop()
-    logger.info("Kernel stopped during shutdown")
+    logger.info("Resources cleaned up")
 
 if __name__ == "__main__":
     try:
