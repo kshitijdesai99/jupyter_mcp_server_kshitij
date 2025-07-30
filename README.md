@@ -97,3 +97,4 @@ Add this configuration to your Claude desktop `config.json` file:
 - Ensure the Jupyter server is running before connecting with the client
 - Verify that your token matches between the server and client configuration
 - For Windows paths in Docker, use double backslashes as shown in the example
+- Remember to open http://localhost:8888/lab this url only nothing apart from this works
