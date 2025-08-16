@@ -42,8 +42,9 @@ touch notebook.ipynb
 ### 3. Start Jupyter Server
 
 ```bash
-jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN --ip 0.0.0.0
+jupyter lab --port 8888 --IdentityProvider.token MY_TOKEN --ip 0.0.0.0 --no-browser
 ```
+then manually go to http://localhost:8888
 
 > **Note:** Replace `MY_TOKEN` with your preferred authentication token or just keep it as it is.
 
